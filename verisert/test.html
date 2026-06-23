@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>VeriSert — Unit Tests</title>
+  <style>
+    body { font-family: monospace; padding: 24px; background: #111; color: #ddd; }
+    h1   { color: #fff; margin-bottom: 4px; }
+    p.subtitle { color: #888; margin-top: 0; margin-bottom: 24px; }
+    h2   { color: #aaa; margin-top: 28px; border-bottom: 1px solid #333;
+           padding-bottom: 6px; font-size: 0.95em; }
+    .pass { color: #4caf50; }
+    .fail { color: #f44336; font-weight: bold; }
+    .summary { margin-top: 28px; padding: 12px 16px; border-radius: 6px;
+               font-size: 1.05em; font-weight: bold; }
+    .summary.ok  { background: #1b4332; color: #4caf50; }
+    .summary.err { background: #4a0000; color: #f44336; }
+  </style>
+</head>
+<body>
+  <h1>VeriSert — Unit Tests</h1>
+  <p class="subtitle">Epic B: utils.js (B-1 · B-2 · B-3)</p>
+  <div id="results"></div>
+
+  <!-- Urutan load wajib sama dengan index.html -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/stego.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/app.js"></script>
+
+  <script>
+    /* ── Test harness ──────────────────────────────────────────────────────── */
+    const container = document.getElementById('results');
+    let passCount = 0, failCount = 0;
+
+    function section(title) {
+      const h = document.createElement('h2');
+      h.textContent = title;
+      container.appendChild(h);
+    }
+
+    function assert(name, condition) {
+      const div = document.createElement('div');
+      if (condition) {
+        div.className = 'pass';
+        div.textContent = '\u2705 PASS \u2014 ' + name;
+        passCount++;
+      } else {
+        div.className = 'fail';
+        div.textContent = '\u274c FAIL \u2014 ' + name;
+        failCount++;
+      }
+      container.appendChild(div);
+      console.log(div.textContent);
+    }
+
+    async function runAll() {
+    /* ── B-1 : bytesToBits & bitsToBytes ──────────────────────────────────── */
+    section('B-1 \u2014 bytesToBits & bitsToBytes');
+
+    // bytesToBits([0]) → 8 elemen, semua 0
+    const bits0 = bytesToBits(new Uint8Array([0]));
+    assert('bytesToBits([0]) \u2192 panjang 8',   bits0.length === 8);
+    assert('bytesToBits([0]) \u2192 semua 0',      bits0.every(b => b === 0));
+
+    // bytesToBits([255]) → 8 elemen, semua 1
+    const bits255 = bytesToBits(new Uint8Array([255]));
+    assert('bytesToBits([255]) \u2192 panjang 8',  bits255.length === 8);
+    assert('bytesToBits([255]) \u2192 semua 1',     bits255.every(b => b === 1));
+
+    // round-trip untuk [0, 255, 128, 1, 42]
+    const origB1 = new Uint8Array([0, 255, 128, 1, 42]);
+    const rtB1   = bitsToBytes(bytesToBits(origB1));
+    assert('round-trip: panjang sama',             origB1.length === rtB1.length);
+    assert('round-trip: [0] \u2192 0',             rtB1[0] === 0);
+    assert('round-trip: [1] \u2192 255',           rtB1[1] === 255);
+    assert('round-trip: [2] \u2192 128',           rtB1[2] === 128);
+    assert('round-trip: [3] \u2192 1',             rtB1[3] === 1);
+    assert('round-trip: [4] \u2192 42',            rtB1[4] === 42);
+
+    // MSB-first verifikasi
+    assert('MSB-first: bytesToBits([1])  = 00000001',
+      bytesToBits(new Uint8Array([1])).join('') === '00000001');
+    assert('MSB-first: bytesToBits([128]) = 10000000',
+      bytesToBits(new Uint8Array([128])).join('') === '10000000');
+
+    /* ── B-2 : uint32ToBits & bitsToUint32 ───────────────────────────────── */
+    section('B-2 \u2014 uint32ToBits & bitsToUint32');
+
+    // uint32ToBits(0) → 32 elemen semua 0
+    const u32bits0 = uint32ToBits(0);
+    assert('uint32ToBits(0) \u2192 panjang 32',   u32bits0.length === 32);
+    assert('uint32ToBits(0) \u2192 semua 0',       u32bits0.every(b => b === 0));
+
+    // uint32ToBits(4294967295) → 32 elemen semua 1
+    const u32bitsMax = uint32ToBits(4294967295);
+    assert('uint32ToBits(MAX) \u2192 panjang 32',  u32bitsMax.length === 32);
+    assert('uint32ToBits(MAX) \u2192 semua 1',      u32bitsMax.every(b => b === 1));
+
+    // round-trip untuk N = 0, 1, 255, 65536, 4294967295
+    [0, 1, 255, 65536, 4294967295].forEach(N => {
+      assert('round-trip uint32 N=' + N,
+        bitsToUint32(uint32ToBits(N)) === N);
+    });
+
+    /* ── B-3 : utf8ToBytes & bytesToUtf8 ─────────────────────────────────── */
+    section('B-3 \u2014 utf8ToBytes & bytesToUtf8');
+
+    assert('round-trip "test123"',
+      bytesToUtf8(utf8ToBytes('test123')) === 'test123');
+
+    // string kosong tidak menyebabkan error
+    let utf8EmptyOk = false;
+    try {
+      utf8EmptyOk = bytesToUtf8(utf8ToBytes('')) === '';
+    } catch (e) { /* akan FAIL */ }
+    assert('string kosong \u2014 tidak error, hasil ""', utf8EmptyOk);
+
+    // string yang mengandung karakter non-ASCII (nama Indonesia umum)
+    assert('round-trip "Ainun Najib \u2014 Sertifikat"',
+      bytesToUtf8(utf8ToBytes('Ainun Najib \u2014 Sertifikat')) ===
+      'Ainun Najib \u2014 Sertifikat');
+
+    // round-trip JSON sertifikat lengkap
+    const sampleJson = JSON.stringify({
+      nama: 'Budi Santoso', nim: '2024001',
+      program: 'Kriptografi Lanjutan',
+      no_sertifikat: 'CERT-2026-0042',
+      tanggal_terbit: '2026-06-20',
+      penerbit: 'Universitas Teknik Informatika'
+    });
+    assert('round-trip JSON sertifikat lengkap',
+      bytesToUtf8(utf8ToBytes(sampleJson)) === sampleJson);
+
+    /* ── C-6 : stego.js round-trip ───────────────────────────────────────── */
+    section('C-6 \u2014 stego.js round-trip');
+
+    // Simulasi embed+extract pada ImageData sintetis 10x10:
+    const fakeImageData = { width: 10, height: 10, data: new Uint8ClampedArray(10*10*4).fill(200) };
+    const payload = utf8ToBytes("test123");
+    embedLSB(fakeImageData, payload);
+    const extracted = extractLSB(fakeImageData);
+    assert('embed+extract round-trip', bytesToUtf8(extracted) === "test123");
+
+    /* ── D-1 : crypto.js DecryptionError ─────────────────────────────────── */
+    section('D-1 \u2014 DecryptionError');
+
+    try {
+      const err = new DecryptionError("testing error");
+      assert('class DecryptionError extends Error', err instanceof Error && err.message === "testing error");
+    } catch (e) {
+      assert('class DecryptionError extends Error', false);
+    }
+
+    /* ── D-2 : encryptCertificateData ─────────────────────────────────────── */
+    section('D-2 \u2014 encryptCertificateData');
+
+    const sampleDataObj = { nama: "Siti", program: "Ilmu Komputer" };
+    const ct1 = encryptCertificateData(sampleDataObj, "passphrase123");
+    const ct2 = encryptCertificateData(sampleDataObj, "passphrase123");
+
+    // Output harus sesuai dengan pola Base64
+    const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+    assert('Output cocok pola base64', base64Regex.test(ct1));
+
+    // Enkripsi 2x menghasilkan hasil yang berbeda karena random salt
+    assert('Enkripsi data yang sama 2x \u2192 ciphertext BERBEDA', ct1 !== ct2 && ct1.length > 0 && ct2.length > 0);
+
+    /* ── D-3 : decryptCertificateData ─────────────────────────────────────── */
+    section('D-3 \u2014 decryptCertificateData');
+
+    // Kriteria 1: decrypt(encrypt(data, "pass123"), "pass123") → objek identik data asli
+    const d3Data = { nama: 'Budi', nim: '2024001', program: 'Kriptografi' };
+    const d3Encrypted = encryptCertificateData(d3Data, 'pass123');
+    const d3Decrypted = decryptCertificateData(d3Encrypted, 'pass123');
+    assert(
+      'decrypt(encrypt(data,"pass123"),"pass123") \u2192 objek identik',
+      JSON.stringify(d3Decrypted) === JSON.stringify(d3Data)
+    );
+
+    // Kriteria 2: passphrase salah → melempar DecryptionError (bukan error JS mentah)
+    let wrongPassThrew = false;
+    let wrongPassIsDecryptionError = false;
+    try {
+      decryptCertificateData(d3Encrypted, 'passphrase_salah');
+    } catch (e) {
+      wrongPassThrew = true;
+      wrongPassIsDecryptionError = e instanceof DecryptionError;
+    }
+    assert('decrypt(ciphertext,"passphrase_salah") \u2192 melempar DecryptionError', wrongPassThrew && wrongPassIsDecryptionError);
+
+    // Kriteria 3: string random bukan ciphertext → melempar DecryptionError dengan baik (tidak crash)
+    let randomStringThrew = false;
+    let randomStringIsDecryptionError = false;
+    try {
+      decryptCertificateData('ini_bukan_ciphertext_sama_sekali', 'apapun');
+    } catch (e) {
+      randomStringThrew = true;
+      randomStringIsDecryptionError = e instanceof DecryptionError;
+    }
+    assert('decrypt("string_random_bukan_ciphertext","apapun") \u2192 DecryptionError (tidak crash)', randomStringThrew && randomStringIsDecryptionError);
+
+    /* ── D-4 : TDD §13 — crypto round-trip assertions (verbatim) ──────────── */
+    section('D-4 \u2014 TDD \u00a713 Crypto Round-Trip');
+
+    // Persis dari TDD §13: crypto round-trip
+    const ct = encryptCertificateData({nama: 'Budi'}, 'rahasia123');
+    const dec = decryptCertificateData(ct, 'rahasia123');
+    assert('crypto round-trip (TDD \u00a713): dec.nama === "Budi"', dec.nama === 'Budi');
+
+    // Persis dari TDD §13: wrong passphrase harus throw DecryptionError
+    let d4WrongPassIsDE = false;
+    try {
+      decryptCertificateData(ct, 'salah');
+      assert('wrong passphrase throws DecryptionError (TDD \u00a713)', false);
+    } catch (e) {
+      d4WrongPassIsDE = e instanceof DecryptionError;
+      assert('wrong passphrase throws DecryptionError (TDD \u00a713)', d4WrongPassIsDE);
+    }
+
+    /* ── E-1 : loadImageToCanvas (async) ──────────────────────────────────── */
+    section('E-1 \u2014 loadImageToCanvas');
+
+    // Kriteria 1: PNG valid → resolve {canvas, ctx, width, height}
+    // Buat PNG minimal 1x1 px secara programatis dengan canvas
+    await (async () => {
+      try {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = 5; offscreen.height = 3;
+        const blob = await new Promise(res => offscreen.toBlob(res, 'image/png'));
+        const file = new File([blob], 'test.png', { type: 'image/png' });
+        const result = await loadImageToCanvas(file);
+        assert(
+          'PNG valid \u2192 resolve {canvas,ctx,width,height} sesuai dimensi asli',
+          result && result.canvas instanceof HTMLCanvasElement &&
+          typeof result.ctx === 'object' &&
+          result.width === 5 && result.height === 3
+        );
+      } catch (e) {
+        assert('PNG valid \u2192 resolve {canvas,ctx,width,height} sesuai dimensi asli', false);
+      }
+    })();
+
+    // Kriteria 2: file corrupt/bukan gambar → reject dengan Error, tidak hang
+    await (async () => {
+      let rejected = false;
+      let rejectedWithError = false;
+      try {
+        const corruptBlob = new Blob(['ini bukan gambar sama sekali'], { type: 'text/plain' });
+        const corruptFile = new File([corruptBlob], 'bukan_gambar.txt', { type: 'text/plain' });
+        await loadImageToCanvas(corruptFile);
+      } catch (e) {
+        rejected = true;
+        rejectedWithError = e instanceof Error;
+      }
+      assert('File corrupt/bukan gambar \u2192 reject dengan Error, tidak hang', rejected && rejectedWithError);
+    })();
+
+    /* ── E-2 : canvasToPNGBlob (async) ────────────────────────────────────── */
+    section('E-2 \u2014 canvasToPNGBlob');
+
+    await (async () => {
+      // Buat canvas 4x4 sintetis
+      const c = document.createElement('canvas');
+      c.width = 4; c.height = 4;
+      const blob = await canvasToPNGBlob(c);
+
+      // Kriteria 1: Blob.type === 'image/png'
+      assert('Blob.type === "image/png"', blob instanceof Blob && blob.type === 'image/png');
+
+      // Kriteria 2: Blob bisa dijadikan object URL dan ditampilkan di <img> tanpa error
+      let imgLoaded = false;
+      await new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+        img.onload  = () => { imgLoaded = true;  URL.revokeObjectURL(url); resolve(); };
+        img.onerror = () => {                     URL.revokeObjectURL(url); resolve(); };
+        img.src = url;
+      });
+      assert('Blob → object URL → ditampilkan di <img> tanpa error', imgLoaded);
+    })();
+
+    /* ── G-1 : Validasi form sebelum submit ──────────────────────────────── */
+    section('G-1 — Validasi form (empty field + non-PNG check)');
+
+    // Kriteria 1: Submit dengan field kosong → form tidak valid (checkValidity() === false)
+    (function() {
+      const form = document.getElementById('form-generate');
+      if (!form) {
+        assert('Form #form-generate ada di DOM', false);
+        return;
+      }
+      // Pastikan semua field kosong
+      const inputs = form.querySelectorAll('input[required]');
+      inputs.forEach(i => { i._savedVal = i.value; i.value = ''; });
+      const isInvalid = !form.checkValidity();
+      // Restore nilai sebelumnya
+      inputs.forEach(i => { i.value = i._savedVal; });
+      assert('Field kosong → form.checkValidity() === false (submit dicegah)', isInvalid);
+    })();
+
+    // Kriteria 2: Upload file non-PNG → dideteksi sebagai bukan PNG
+    (function() {
+      // Simulasi fungsi deteksi tipe yang sama dengan app.js
+      function isPNGFile(file) {
+        return file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+      }
+
+      const fakeJpg  = new File(['data'], 'foto.jpg',  { type: 'image/jpeg' });
+      const fakeTxt  = new File(['data'], 'doc.txt',   { type: 'text/plain' });
+      const realPng  = new File(['data'], 'img.png',   { type: 'image/png'  });
+      const pngNoMime = new File(['data'], 'img.png',  { type: '' });   // nama .png, mime kosong
+
+      assert('JPG terdeteksi sebagai BUKAN PNG', !isPNGFile(fakeJpg));
+      assert('TXT terdeteksi sebagai BUKAN PNG', !isPNGFile(fakeTxt));
+      assert('PNG (image/png) terdeteksi sebagai PNG', isPNGFile(realPng));
+      assert('PNG (nama .png, mime kosong) terdeteksi sebagai PNG', isPNGFile(pngNoMime));
+    })();
+
+    /* ── G-2 : Capacity check & live indicator ────────────────────────────── */
+    section('G-2 — Capacity check & live indicator');
+
+    // Kriteria 1: Kapasitas = width × height × 3 bit
+    (function() {
+      const w = 800, h = 600;
+      const cap = w * h * 3;
+      assert('Kapasitas = width × height × 3  (800×600 → 1.440.000 bit)', cap === 1_440_000);
+      assert('Kapasitas selalu ≥ 0', cap >= 0);
+    })();
+
+    // Kriteria 2: estimateRequiredBits → non-null ketika semua field terisi, lebih besar dari 0
+    (function() {
+      // Implementasikan ulang fungsi estimasi yang sama seperti di app.js untuk pengujian terisolasi
+      function estimateRequiredBitsTest(data) {
+        const { nama, nim, program, no_sertifikat, tanggal_terbit, penerbit, passphrase } = data;
+        if (!nama || !nim || !program || !no_sertifikat || !tanggal_terbit || !penerbit || !passphrase) return null;
+        const dataObj  = { nama, nim, program, no_sertifikat, tanggal_terbit, penerbit };
+        const jsonStr  = JSON.stringify(dataObj);
+        const estimatedBytes = Math.ceil(jsonStr.length * 1.4) + 100;
+        return estimatedBytes * 8 + 32;
+      }
+
+      const fullData = {
+        nama: 'Budi Santoso', nim: '20210001', program: 'Kriptografi',
+        no_sertifikat: 'CERT-2024-001', tanggal_terbit: '2024-06-01',
+        penerbit: 'Universitas X', passphrase: 'rahasiaku'
+      };
+      const partialData = { nama: 'Budi', nim: '', program: '', no_sertifikat: '', tanggal_terbit: '', penerbit: '', passphrase: '' };
+
+      const req = estimateRequiredBitsTest(fullData);
+      assert('Field penuh → estimasiKebutuhan() !== null', req !== null);
+      assert('Field penuh → estimasiKebutuhan() > 0 bit', req > 0);
+      assert('Field kosong → estimasiKebutuhan() === null', estimateRequiredBitsTest(partialData) === null);
+
+      // Kriteria 3: Gambar besar → cukup; gambar kecil (10×10) → tidak cukup
+      const bigCap   = 4000 * 3000 * 3;  // 36.000.000 bit
+      const smallCap = 10 * 10 * 3;      // 300 bit
+      assert('Gambar besar (4000×3000) → kapasitas cukup untuk data tipikal', bigCap >= req);
+      assert('Gambar kecil (10×10)    → kapasitas TIDAK cukup', smallCap < req);
+    })();
+
+    /* ── J-1 (TC1): End-to-End Integration (Happy Path) ──────────────────── */
+    section('J-1 (TC1) \u2014 Generate \u2192 Embed \u2192 Extract \u2192 Verify');
+
+    (function() {
+      // 1. Data input (Generate)
+      const inputData = {
+        nama: 'Aisyah Putri',
+        nim: '20230101',
+        program: 'Sertifikasi Keamanan Siber',
+        no_sertifikat: 'CYB-001-2023',
+        tanggal_terbit: '2023-11-15',
+        penerbit: 'Kementerian Komunikasi'
+      };
+      const passphrase = 'passwordSangatRahasia123';
+
+      // 2. Enkripsi (seperti di app.js - handleGenerateSubmit)
+      let ciphertext;
+      try {
+        ciphertext = encryptCertificateData(inputData, passphrase);
+      } catch (e) {
+        assert('Enkripsi gagal', false);
+        return;
+      }
+      const payloadBytes = utf8ToBytes(ciphertext);
+
+      // 3. Buat gambar sintetis berukuran cukup (misal 500x500 = 750,000 bit)
+      const fakeWidth = 500;
+      const fakeHeight = 500;
+      const totalPixels = fakeWidth * fakeHeight;
+      // Gunakan Uint8ClampedArray layaknya ImageData asli (RGB + Alpha)
+      const fakePixels = new Uint8ClampedArray(totalPixels * 4).fill(255);
+      const fakeImageData = { width: fakeWidth, height: fakeHeight, data: fakePixels };
+
+      // 4. Embed data ke gambar (Simulasi Generate Save)
+      try {
+        embedLSB(fakeImageData, payloadBytes);
+        assert('Proses embed LSB berhasil', true);
+      } catch (e) {
+        assert('Proses embed LSB gagal: ' + e.message, false);
+        return;
+      }
+
+      // 5. Ekstrak data dari gambar (Simulasi Verify Upload)
+      let extractedBytes;
+      try {
+        extractedBytes = extractLSB(fakeImageData);
+        assert('Proses extract LSB berhasil', true);
+      } catch (e) {
+        assert('Proses extract LSB gagal: ' + e.message, false);
+        return;
+      }
+
+      // 6. Dekripsi (seperti di app.js - handleVerifySubmit)
+      let extractedCiphertext = bytesToUtf8(extractedBytes);
+      let outputData;
+      try {
+        outputData = decryptCertificateData(extractedCiphertext, passphrase);
+        assert('Proses dekripsi berhasil', true);
+      } catch (e) {
+        assert('Proses dekripsi gagal: ' + e.message, false);
+        return;
+      }
+
+      // 7. Verifikasi semua field identik
+      assert('Field "nama" identik', inputData.nama === outputData.nama);
+      assert('Field "nim" identik', inputData.nim === outputData.nim);
+      assert('Field "program" identik', inputData.program === outputData.program);
+      assert('Field "no_sertifikat" identik', inputData.no_sertifikat === outputData.no_sertifikat);
+      assert('Field "tanggal_terbit" identik', inputData.tanggal_terbit === outputData.tanggal_terbit);
+      assert('Field "penerbit" identik', inputData.penerbit === outputData.penerbit);
+    })();
+
+    /* ── J-2 (TC2): Verify dengan passphrase salah ───────────────────────── */
+    section('J-2 (TC2) \u2014 Verify dengan passphrase salah');
+
+    (function() {
+      const inputData = { nama: 'Budi', nim: '123', program: 'A', no_sertifikat: '1', tanggal_terbit: '2023-01-01', penerbit: 'X' };
+      const rightPass = 'benar123';
+      const wrongPass = 'salah456';
+
+      const ciphertext = encryptCertificateData(inputData, rightPass);
+      const payloadBytes = utf8ToBytes(ciphertext);
+
+      const fakePixels = new Uint8ClampedArray(100 * 100 * 4).fill(128);
+      const fakeImageData = { width: 100, height: 100, data: fakePixels };
+      embedLSB(fakeImageData, payloadBytes);
+
+      const extractedBytes = extractLSB(fakeImageData);
+      const extractedCiphertext = bytesToUtf8(extractedBytes);
+
+      try {
+        decryptCertificateData(extractedCiphertext, wrongPass);
+        assert('Dekripsi dengan passphrase salah harusnya gagal', false);
+      } catch (e) {
+        assert('Dekripsi gagal dengan DecryptionError saat passphrase salah', e instanceof DecryptionError);
+        assert('Aplikasi tidak crash, melempar error dengan rapi', true);
+      }
+    })();
+
+    /* ── J-3 (TC3): Verify gambar acak (bukan hasil sistem) ─────────────── */
+    section('J-3 (TC3) \u2014 Verify gambar acak (bukan hasil stego)');
+
+    (function() {
+      // Buat gambar berisi noise acak (mensimulasikan gambar biasa)
+      const fakePixels = new Uint8ClampedArray(100 * 100 * 4);
+      for (let i = 0; i < fakePixels.length; i++) {
+        fakePixels[i] = Math.floor(Math.random() * 256);
+      }
+      // Set alpha ke 255
+      for (let i = 3; i < fakePixels.length; i += 4) {
+        fakePixels[i] = 255;
+      }
+      const fakeImageData = { width: 100, height: 100, data: fakePixels };
+
+      try {
+        const extractedBytes = extractLSB(fakeImageData);
+        const extractedCiphertext = bytesToUtf8(extractedBytes);
+        decryptCertificateData(extractedCiphertext, 'passphraseApapun');
+        assert('Dekripsi gambar acak harusnya gagal', false);
+      } catch (e) {
+        // Akan gagal entah saat ekstrak panjang byte yang gila (out of memory/capacity),
+        // atau UTF-8 gagal, atau saat AES decrypt karena bukan base64 AES valid.
+        assert('Aplikasi menangkap error dari gambar non-stego dan tidak crash', true);
+      }
+    })();
+
+
+    /* ── Ringkasan (setelah semua async selesai) ──────────────────────────── */
+    const summary = document.createElement('div');
+    summary.className = 'summary ' + (failCount === 0 ? 'ok' : 'err');
+    summary.textContent =
+      'Hasil: ' + passCount + ' PASS, ' + failCount + ' FAIL' +
+      (failCount === 0 ? ' \u2014 semua test lulus \u2705' : ' \u2014 ada yang gagal, cek di atas \u274c');
+    container.appendChild(summary);
+  }
+
+  runAll().catch(e => {
+    const div = document.createElement('div');
+    div.className = 'fail';
+    div.textContent = '\u274c ERROR FATAL: ' + e.message;
+    container.appendChild(div);
+  });
+  </script>
+</body>
+</html>

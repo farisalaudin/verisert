@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VeriSert — Verifikasi Keaslian Sertifikat Digital</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>VeriSert</h1>
+    <p>Sistem Verifikasi Keaslian Sertifikat Digital</p>
+  </header>
+
+  <nav class="tabs">
+    <button id="tab-btn-generate" data-tab="generate" class="tab-btn active">Buat Sertifikat</button>
+    <button id="tab-btn-verify" data-tab="verify" class="tab-btn">Verifikasi Sertifikat</button>
+  </nav>
+
+  <!-- Tab: Buat Sertifikat -->
+  <section id="tab-generate" class="tab-section">
+    <form id="form-generate">
+      <div class="form-group">
+        <label for="input-nama">Nama Lengkap</label>
+        <input type="text" id="input-nama" name="nama" required />
+      </div>
+      <div class="form-group">
+        <label for="input-nim">NIM / ID</label>
+        <input type="text" id="input-nim" name="nim" required />
+      </div>
+      <div class="form-group">
+        <label for="input-program">Program / Kursus</label>
+        <input type="text" id="input-program" name="program" required />
+      </div>
+      <div class="form-group">
+        <label for="input-no-sertifikat">No. Sertifikat</label>
+        <input type="text" id="input-no-sertifikat" name="no_sertifikat" required />
+      </div>
+      <div class="form-group">
+        <label for="input-tanggal-terbit">Tanggal Terbit</label>
+        <input type="date" id="input-tanggal-terbit" name="tanggal_terbit" required />
+      </div>
+      <div class="form-group">
+        <label for="input-penerbit">Penerbit / Instansi</label>
+        <input type="text" id="input-penerbit" name="penerbit" required />
+      </div>
+      <div class="form-group">
+        <label for="input-cover-image">Upload Cover Image (PNG)</label>
+        <input type="file" id="input-cover-image" name="cover_image" accept="image/png" required />
+      </div>
+      <div class="form-group">
+        <label for="input-passphrase">Passphrase Enkripsi</label>
+        <input type="password" id="input-passphrase" name="passphrase" required />
+      </div>
+      <div id="capacity-info"></div>
+      <button type="submit" id="btn-generate">Generate</button>
+    </form>
+    <div id="preview-area"></div>
+  </section>
+
+  <!-- Tab: Verifikasi Sertifikat -->
+  <section id="tab-verify" class="tab-section" hidden>
+    <form id="form-verify">
+      <div class="form-group">
+        <label for="input-verify-image">Upload Gambar Sertifikat (PNG)</label>
+        <input type="file" id="input-verify-image" name="verify_image" accept="image/png" required />
+      </div>
+      <div class="form-group">
+        <label for="input-verify-passphrase">Passphrase</label>
+        <input type="password" id="input-verify-passphrase" name="passphrase" required />
+      </div>
+      <button type="submit" id="btn-verify">Verifikasi</button>
+    </form>
+    <div id="verify-result"></div>
+  </section>
+
+  <!--
+    URUTAN LOAD SCRIPT KRITIS — jangan diubah:
+    1. CryptoJS CDN   → agar tersedia sebelum crypto.js dieksekusi
+    2. utils.js       → konversi bit/byte, dipakai stego.js & crypto.js
+    3. stego.js       → butuh fungsi dari utils.js
+    4. crypto.js      → butuh CryptoJS & utils.js
+    5. app.js         → orkestrasi semua modul di atas
+    Semua pakai classic <script> (bukan type="module") agar jalan via file://
+  -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/stego.js"></script>
+  <script src="js/crypto.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
