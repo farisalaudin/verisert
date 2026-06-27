@@ -65,7 +65,8 @@ function extractLSB(imageData) {
   const headerBits = reader.readBits(HEADER_BITS);
   console.log('[STEGO] headerBits:', headerBits.join(''));
   const payloadByteLength = bitsToUint32(headerBits);
-  console.log('[STEGO] payloadByteLength:', payloadByteLength);
+  console.log('[STEGO] payloadByteLength:', payloadByteLength, 'type:', typeof payloadByteLength);
+  console.log('[STEGO] payloadByteLength *8:', payloadByteLength * 8);
   const payloadBits = reader.readBits(payloadByteLength * 8);
   const payloadBytes = bitsToBytes(payloadBits);
   console.log('[STEGO] payloadBytes:', payloadBytes);
