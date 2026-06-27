@@ -110,15 +110,30 @@ function updateCapacityDisplay() {
   let html = '';
 
   if (hasCap) {
-    html += `<span class="cap-available">Kapasitas tersedia: <strong>${_imageCapacityBits.toLocaleString()} bit</strong></span>`;
+    html += `
+      <div class="capacity-row">
+        <span>Kapasitas tersedia</span>
+        <strong>${_imageCapacityBits.toLocaleString()} bit</strong>
+      </div>`;
   }
 
   if (hasCap && requiredBits !== null) {
     const enough = requiredBits <= _imageCapacityBits;
-    html += `<span class="cap-required ${enough ? 'cap-ok' : 'cap-err'}">
-      Dibutuhkan: <strong>${requiredBits.toLocaleString()} bit</strong>
-      <span class="cap-badge">${enough ? '✅ Cukup' : '❌ Tidak cukup'}</span>
-    </span>`;
+    const meterValue = Math.min(100, Math.round((requiredBits / _imageCapacityBits) * 100));
+    html += `
+      <div class="capacity-meter ${enough ? 'cap-ok' : 'cap-err'}">
+        <div class="capacity-row">
+          <span>Dibutuhkan</span>
+          <span class="capacity-readout">${requiredBits.toLocaleString()} / ${_imageCapacityBits.toLocaleString()} bit</span>
+        </div>
+        <div class="meter-track" aria-hidden="true">
+          <span class="meter-fill" style="--meter-value: ${meterValue}%"></span>
+        </div>
+        <div class="capacity-row">
+          <span></span>
+          <span class="cap-badge">${enough ? 'Cukup' : 'Tidak cukup'}</span>
+        </div>
+      </div>`;
 
     if (btnGenerate) {
       btnGenerate.disabled = !enough;
@@ -169,6 +184,38 @@ if (inputCoverImage) {
   if (el) el.addEventListener('input', updateCapacityDisplay);
 });
 
+/* Event: gambar verifikasi di-upload → tampilkan preview */
+if (inputVerifyImage) {
+  inputVerifyImage.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      verifyPreviewArea.innerHTML = '';
+      return;
+    }
+
+    const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+    if (!isPng) {
+      alert('Harus format PNG');
+      inputVerifyImage.value = '';
+      verifyPreviewArea.innerHTML = '';
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    verifyPreviewArea.innerHTML = `
+      <div class="preview-card verify-preview">
+        <p class="preview-label">Pratinjau</p>
+        <img src="${previewUrl}" alt="Pratinjau gambar sertifikat" class="preview-img" />
+        <p class="file-name">${file.name}</p>
+      </div>
+    `;
+
+    // Revoke URL after image loads
+    const img = verifyPreviewArea.querySelector('img');
+    img.addEventListener('load', () => URL.revokeObjectURL(previewUrl), { once: true });
+  });
+}
+
 /* ── UI Helpers untuk Generate ──────────────────────────────────────────── */
 
 const generateErrorEl = (() => {
@@ -209,7 +256,7 @@ async function handleGenerateSubmit() {
     penerbit:       document.getElementById('input-penerbit')?.value?.trim(),
   };
 
-  if (!file) { showGenerateError('Pilih file gambar cover terlebih dahulu.'); return; }
+  if (!file) { showGenerateError('Pilih gambar sertifikat terlebih dahulu.'); return; }
 
   // Set tombol ke loading state
   if (btnGenerate) { btnGenerate.disabled = true; btnGenerate.textContent = 'Memproses…'; }
@@ -249,18 +296,31 @@ async function handleGenerateSubmit() {
     // Langkah 10 & 11 (G-4 & G-5): render preview + download — dipanggil dari renderPreviewAndDownload
     renderPreviewAndDownload(file, canvas, blob, dataObj);
 
+    // Log to MCP Stitch
+    await logToStitch('GENERATE', {
+      ...dataObj,
+      status: 'SUCCESS'
+    });
+
   } catch (err) {
     if (err instanceof CapacityError) {
-      showGenerateError('⚠️ ' + err.message);
+      showGenerateError(err.message);
     } else {
-      showGenerateError('❌ Terjadi kesalahan: ' + err.message);
+      showGenerateError('Terjadi kesalahan: ' + err.message);
     }
+    // Log error to Stitch
+    await logToStitch('GENERATE', {
+      nama: dataObj?.nama || 'N/A',
+      status: 'FAILED',
+      error: err.message
+    });
   } finally {
     // Kembalikan tombol ke state normal
     if (btnGenerate) {
       btnGenerate.disabled = false;
-      btnGenerate.textContent = 'Generate';
+      btnGenerate.textContent = 'Generate Sertifikat';
     }
+    updateCapacityDisplay();
   }
 }
 
@@ -309,25 +369,25 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
 
   previewArea.innerHTML = `
     <div class="preview-section">
-      <h3 class="preview-title">✅ Sertifikat Berhasil Dibuat</h3>
+      <h3 class="preview-title">Sertifikat Berhasil Dibuat</h3>
 
       <div class="preview-grid">
         <div class="preview-card">
-          <p class="preview-label">Sebelum (Original)</p>
+          <p class="preview-label">Asli</p>
           <img id="preview-original" src="${originalUrl}" alt="Gambar sertifikat original" class="preview-img" />
         </div>
         <div class="preview-card">
-          <p class="preview-label">Sesudah (Stego — data tersembunyi disisipkan)</p>
+          <p class="preview-label">Hasil Steganografi</p>
           <img id="preview-stego" src="${stegoPreviewUrl}" alt="Gambar sertifikat stego" class="preview-img" />
         </div>
       </div>
 
       <p class="preview-note">
-        💡 Kedua gambar terlihat identik secara visual. Data sertifikat terenkripsi tersembunyi di bit terakhir (LSB) setiap channel piksel.
+        Kedua gambar terlihat identik secara visual. Data sertifikat terenkripsi tersembunyi di bit terakhir setiap channel piksel.
       </p>
 
       <button id="btn-download" class="btn-download" data-filename="${filename}">
-        ⬇️ Download Sertifikat (${filename})
+        Unduh Sertifikat (.png)
       </button>
     </div>
   `;
@@ -346,7 +406,7 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
   const dlBtn = document.getElementById('btn-download');
   dlBtn.addEventListener('click', async () => {
     dlBtn.disabled = true;
-    dlBtn.textContent = '⏳ Menyiapkan file…';
+    dlBtn.textContent = 'Menyiapkan file…';
 
     try {
       // Export ulang dari canvas stegoCanvas → blob PNG yang fresh
@@ -354,7 +414,7 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
 
       // Validasi blob: pastikan type benar dan ukuran > 0
       if (!freshBlob || freshBlob.type !== 'image/png' || freshBlob.size === 0) {
-        alert('❌ Gagal mengekspor gambar. Pastikan gambar PNG sudah diproses dengan benar.');
+        alert('Gagal mengekspor gambar. Pastikan gambar PNG sudah diproses dengan benar.');
         return;
       }
 
@@ -373,10 +433,10 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
       setTimeout(() => { URL.revokeObjectURL(downloadUrl); }, 15000);
 
     } catch (err) {
-      alert('❌ Download gagal: ' + err.message);
+      alert('Download gagal: ' + err.message);
     } finally {
       dlBtn.disabled = false;
-      dlBtn.textContent = `⬇️ Download Sertifikat (${filename})`;
+      dlBtn.textContent = 'Unduh Sertifikat (.png)';
     }
   });
 
@@ -391,6 +451,7 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
 const formVerify        = document.getElementById('form-verify');
 const inputVerifyImage  = document.getElementById('input-verify-image');
 const btnVerify         = document.getElementById('btn-verify');
+const verifyPreviewArea = document.getElementById('verify-preview-area');
 
 /**
  * H-2: Orkestrasi penuh Verify Certificate sesuai TDD §7.2 langkah 1–6.
@@ -467,6 +528,12 @@ async function handleVerifySubmit() {
     // Langkah 6 — Sukses: render hasil valid
     renderVerificationResult('valid', dataObj);
 
+    // Log to MCP Stitch
+    await logToStitch('VERIFY', {
+      ...dataObj,
+      status: 'VALID'
+    });
+
   } catch (err) {
     // Tangkap error tak terduga (gambar gagal dimuat, dll.)
     renderVerificationResult(
@@ -502,18 +569,29 @@ function renderVerificationResult(status, dataObj, msg) {
   el.innerHTML = '';
 
   if (status === 'invalid') {
+    let badgeLabel = msg || 'Passphrase Salah atau Sertifikat Telah Dimodifikasi';
+    if (badgeLabel.toLowerCase().includes('tidak ditemukan')) {
+      badgeLabel = 'Tidak Ditemukan Tanda Tangan Digital';
+    } else if (badgeLabel.toLowerCase().includes('passphrase')) {
+      badgeLabel = 'Passphrase Salah atau Sertifikat Telah Dimodifikasi';
+    }
+
     const errorDiv = document.createElement('div');
     errorDiv.className = 'verify-status invalid';
     errorDiv.innerHTML = `
-      <div class="verify-badge">❌ TIDAK VALID</div>
-      <p class="verify-msg">${msg || 'Verifikasi gagal.'}</p>
+      <div class="status-frame">
+        <div class="verify-badge">${badgeLabel}</div>
+      </div>
+      <p class="verify-msg">Sertifikat tidak dapat diverifikasi. Pastikan gambar masih berformat PNG dan passphrase sesuai dengan data penerbit.</p>
     `;
     el.appendChild(errorDiv);
   } else if (status === 'valid' && dataObj) {
     const successDiv = document.createElement('div');
     successDiv.className = 'verify-status valid';
     successDiv.innerHTML = `
-      <div class="verify-badge">✅ Sertifikat Asli — Data Terverifikasi</div>
+      <div class="status-frame">
+        <div class="verify-badge">Sertifikat Asli — Data Terverifikasi</div>
+      </div>
       <div class="verify-data-card" id="verify-data-container"></div>
     `;
     el.appendChild(successDiv);
@@ -521,12 +599,12 @@ function renderVerificationResult(status, dataObj, msg) {
     // Render field data dengan aman menggunakan textContent (bukan innerHTML)
     const container = document.getElementById('verify-data-container');
     const fields = [
-      { key: 'nama', label: 'Nama Lengkap' },
-      { key: 'nim', label: 'NIM / ID' },
-      { key: 'program', label: 'Program / Kursus' },
-      { key: 'no_sertifikat', label: 'No. Sertifikat' },
+      { key: 'nama', label: 'Nama Penerima' },
+      { key: 'nim', label: 'NIM' },
+      { key: 'program', label: 'Nama Program/Sertifikat' },
+      { key: 'no_sertifikat', label: 'Nomor Sertifikat' },
       { key: 'tanggal_terbit', label: 'Tanggal Terbit' },
-      { key: 'penerbit', label: 'Penerbit / Instansi' }
+      { key: 'penerbit', label: 'Nama Instansi Penerbit' }
     ];
 
     fields.forEach(field => {
@@ -549,3 +627,36 @@ function renderVerificationResult(status, dataObj, msg) {
   }
 }
 
+/* ── Initialization: Check MCP Stitch Connection ───────────────────────── */
+
+/**
+ * Initialize Stitch connection check on app load
+ */
+async function initStitchConnection() {
+  const statusEl = document.getElementById('stitch-status');
+  if (!statusEl) return;
+
+  try {
+    const isHealthy = await checkStitchHealth();
+    if (isHealthy) {
+      statusEl.textContent = '✅ MCP Stitch Terhubung';
+      statusEl.style.background = '#d4edda';
+      statusEl.style.color = '#155724';
+    } else {
+      statusEl.textContent = '⚠️ MCP Stitch Tidak Terhubung';
+      statusEl.style.background = '#fff3cd';
+      statusEl.style.color = '#856404';
+    }
+  } catch (error) {
+    statusEl.textContent = '❌ Error Koneksi Stitch';
+    statusEl.style.background = '#f8d7da';
+    statusEl.style.color = '#721c24';
+  }
+}
+
+// Initialize on document ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initStitchConnection);
+} else {
+  initStitchConnection();
+}
