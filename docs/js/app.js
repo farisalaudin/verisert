@@ -68,6 +68,11 @@ const formGenerate   = document.getElementById('form-generate');
 const inputCoverImage = document.getElementById('input-cover-image');
 const capacityInfo   = document.getElementById('capacity-info');
 const btnGenerate    = document.getElementById('btn-generate');
+const generatePreviewArea = document.getElementById('generate-preview-area');
+const formVerify      = document.getElementById('form-verify');
+const inputVerifyImage = document.getElementById('input-verify-image');
+const btnVerify       = document.getElementById('btn-verify');
+const verifyPreviewArea = document.getElementById('verify-preview-area');
 
 /** State yang disimpan untuk perhitungan kapasitas */
 let _imageCapacityBits = 0;   // w * h * 3 bit dari gambar yang diupload
@@ -150,12 +155,13 @@ function updateCapacityDisplay() {
   capacityInfo.innerHTML = html;
 }
 
-/* Event: gambar di-upload → hitung kapasitas + validasi PNG */
+/* Event: gambar di-upload → hitung kapasitas + validasi PNG + tampilkan preview */
 if (inputCoverImage) {
   inputCoverImage.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     _imageCapacityBits = 0;
     updateCapacityDisplay();
+    generatePreviewArea.innerHTML = '';
 
     if (!file) return;
 
@@ -170,6 +176,20 @@ if (inputCoverImage) {
       const { width, height } = await loadImageToCanvas(file);
       _imageCapacityBits = width * height * 3; // 3 channel (R, G, B) × 1 bit per pixel
       updateCapacityDisplay();
+      
+      // Tampilkan preview gambar
+      const previewUrl = URL.createObjectURL(file);
+      generatePreviewArea.innerHTML = `
+        <div class="preview-card verify-preview">
+          <p class="preview-label">Pratinjau</p>
+          <img src="${previewUrl}" alt="Pratinjau gambar sertifikat" class="preview-img" />
+          <p class="file-name">${file.name}</p>
+        </div>
+      `;
+
+      // Revoke URL after image loads
+      const img = generatePreviewArea.querySelector('img');
+      img.addEventListener('load', () => URL.revokeObjectURL(previewUrl), { once: true });
     } catch (_) {
       _imageCapacityBits = 0;
       updateCapacityDisplay();
@@ -447,11 +467,6 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
 
 
 /* ── H-2: handleVerifySubmit (orkestrasi Verify sesuai TDD §7.2) ─────────── */
-
-const formVerify        = document.getElementById('form-verify');
-const inputVerifyImage  = document.getElementById('input-verify-image');
-const btnVerify         = document.getElementById('btn-verify');
-const verifyPreviewArea = document.getElementById('verify-preview-area');
 
 /**
  * H-2: Orkestrasi penuh Verify Certificate sesuai TDD §7.2 langkah 1–6.
