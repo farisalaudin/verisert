@@ -276,6 +276,14 @@ async function handleGenerateSubmit() {
     }
 
     embedLSB(imageData, payloadBytes);
+    
+    // Test extract immediately to verify
+    console.log('[APP] Testing embed/extract before export...');
+    const testExtractPayload = extractLSB(imageData);
+    console.log('[APP] Test extract payloadBytes:', testExtractPayload);
+    const testCiphertext = bytesToUtf8(testExtractPayload);
+    console.log('[APP] Test ciphertext:', testCiphertext);
+    
     ctx.putImageData(imageData, 0, 0);
     const blob = await canvasToPNGBlob(canvas);
     console.log('[APP] Generated blob, size:', blob.size);
