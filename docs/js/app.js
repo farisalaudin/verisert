@@ -250,15 +250,21 @@ async function handleGenerateSubmit() {
     penerbit:       document.getElementById('input-penerbit')?.value?.trim(),
   };
 
+  console.log('[APP] handleGenerateSubmit, dataObj:', dataObj);
+
   if (!file) { showGenerateError('Pilih gambar sertifikat terlebih dahulu.'); return; }
 
   if (btnGenerate) { btnGenerate.disabled = true; btnGenerate.textContent = 'Memproses…'; }
 
   try {
     const { canvas, ctx, width, height } = await loadImageToCanvas(file);
+    console.log('[APP] Gambar diload, width:', width, 'height:', height);
     const imageData = ctx.getImageData(0, 0, width, height);
+    console.log('[APP] imageData.data.length:', imageData.data.length);
     const ciphertext = encryptCertificateData(dataObj, passphrase);
+    console.log('[APP] ciphertext:', ciphertext);
     const payloadBytes = utf8ToBytes(ciphertext);
+    console.log('[APP] payloadBytes.length:', payloadBytes.length);
 
     const requiredBits  = calculateRequiredBits(payloadBytes.length);
     const capacityBits  = calculateCapacityBits(width, height);
@@ -272,8 +278,10 @@ async function handleGenerateSubmit() {
     embedLSB(imageData, payloadBytes);
     ctx.putImageData(imageData, 0, 0);
     const blob = await canvasToPNGBlob(canvas);
+    console.log('[APP] Generated blob, size:', blob.size);
     renderPreviewAndDownload(file, canvas, blob, dataObj);
   } catch (err) {
+    console.error('[APP] handleGenerateSubmit error:', err);
     if (err instanceof CapacityError) {
       showGenerateError(err.message);
     } else {
@@ -386,11 +394,14 @@ function renderPreviewAndDownload(originalFile, stegoCanvas, blob, dataObj) {
 /* ── handleVerifySubmit ─────────────────────────────────────────────────── */
 
 async function handleVerifySubmit() {
+  console.log('[APP] handleVerifySubmit called');
   const verifyResult = document.getElementById('verify-result');
   if (verifyResult) verifyResult.innerHTML = '';
 
   const file       = inputVerifyImage?.files[0];
   const passphrase = document.getElementById('input-verify-passphrase')?.value?.trim();
+
+  console.log('[APP] File:', file?.name, 'Passphrase:', passphrase ? '<provided>' : '<not provided>');
 
   if (!file) {
     renderVerificationResult('invalid', null, 'Pilih file gambar sertifikat terlebih dahulu.');
@@ -411,12 +422,15 @@ async function handleVerifySubmit() {
 
   try {
     const { canvas, ctx, width, height } = await loadImageToCanvas(file);
+    console.log('[APP] Verify image loaded, width:', width, 'height:', height);
     const imageData = ctx.getImageData(0, 0, width, height);
+    console.log('[APP] Verify imageData.data.length:', imageData.data.length);
 
     let payloadBytes;
     try {
       payloadBytes = extractLSB(imageData);
     } catch (e) {
+      console.error('[APP] extractLSB error:', e);
       renderVerificationResult(
         'invalid', null,
         'Tidak ditemukan tanda tangan digital pada gambar ini.'
@@ -424,11 +438,15 @@ async function handleVerifySubmit() {
       return;
     }
 
+    console.log('[APP] payloadBytes.length:', payloadBytes.length);
     const ciphertext = bytesToUtf8(payloadBytes);
+    console.log('[APP] ciphertext:', ciphertext);
     let dataObj;
     try {
       dataObj = decryptCertificateData(ciphertext, passphrase);
+      console.log('[APP] Decrypted dataObj:', dataObj);
     } catch (e) {
+      console.error('[APP] decryptCertificateData error:', e);
       if (e instanceof DecryptionError) {
         renderVerificationResult(
           'invalid', null,
@@ -445,6 +463,7 @@ async function handleVerifySubmit() {
 
     renderVerificationResult('valid', dataObj);
   } catch (err) {
+    console.error('[APP] handleVerifySubmit error:', err);
     renderVerificationResult(
       'invalid', null,
       'Gagal memproses gambar: ' + err.message

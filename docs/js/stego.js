@@ -38,14 +38,20 @@ function createBitReader(pixels) {
  * @throws {CapacityError}
  */
 function embedLSB(imageData, payloadBytes) {
+  console.log('[STEGO] embedLSB called, payloadBytes.length =', payloadBytes.length);
   const capacityBits = calculateCapacityBits(imageData.width, imageData.height);
   const requiredBits = calculateRequiredBits(payloadBytes.length);
+  console.log('[STEGO] capacityBits =', capacityBits, 'requiredBits =', requiredBits);
   if (requiredBits > capacityBits) {
     throw new CapacityError(`Butuh ${requiredBits} bit, tersedia ${capacityBits} bit.`);
   }
   const writer = createBitWriter(imageData.data);
-  writer.writeBits(uint32ToBits(payloadBytes.length));
-  writer.writeBits(bytesToBits(payloadBytes));
+  const headerBits = uint32ToBits(payloadBytes.length);
+  console.log('[STEGO] headerBits:', headerBits.join(''));
+  writer.writeBits(headerBits);
+  const payloadBits = bytesToBits(payloadBytes);
+  console.log('[STEGO] payloadBits length:', payloadBits.length);
+  writer.writeBits(payloadBits);
   return imageData;
 }
 
@@ -54,9 +60,14 @@ function embedLSB(imageData, payloadBytes) {
  * @returns {Uint8Array} payloadBytes
  */
 function extractLSB(imageData) {
+  console.log('[STEGO] extractLSB called');
   const reader = createBitReader(imageData.data);
   const headerBits = reader.readBits(HEADER_BITS);
+  console.log('[STEGO] headerBits:', headerBits.join(''));
   const payloadByteLength = bitsToUint32(headerBits);
+  console.log('[STEGO] payloadByteLength:', payloadByteLength);
   const payloadBits = reader.readBits(payloadByteLength * 8);
-  return bitsToBytes(payloadBits);
+  const payloadBytes = bitsToBytes(payloadBits);
+  console.log('[STEGO] payloadBytes:', payloadBytes);
+  return payloadBytes;
 }
